@@ -84,6 +84,7 @@
 
 
 
+
   - Create reporting service with customizable date ranges
   - Implement expense summary and category breakdown logic
   - Build interactive charts using Chart.js or D3.js
