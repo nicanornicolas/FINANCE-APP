@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from .api.routers import health, transactions, auth, accounts
+from .api.routers import health, transactions, auth, accounts, reporting
 
 app = FastAPI(title="Finance Backend", version="0.1.0")
 
@@ -19,3 +19,4 @@ app.include_router(health.router)
 app.include_router(auth.router, prefix="/auth", tags=["auth"])
 app.include_router(accounts.router, prefix="/accounts", tags=["accounts"])
 app.include_router(transactions.router, prefix="/transactions", tags=["transactions"])
+app.include_router(reporting.router, prefix="/api", tags=["reporting"])
