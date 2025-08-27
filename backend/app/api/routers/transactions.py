@@ -197,18 +197,53 @@ async def import_transactions(
     current_user: UserModel = Depends(get_current_user)
 ):
     """Import transactions from CSV file"""
-    if not file.filename.endswith('.csv'):
+    if not file.filename or not file.filename.endswith('.csv'):
         raise HTTPException(status_code=400, detail="Only CSV files are supported")
     
-    # TODO: Verify account belongs to user
-    # TODO: Implement CSV parsing and transaction creation
-    # For now, return a mock response
+    try:
+        from uuid import UUID
+        account_uuid = UUID(account_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid account ID format")
     
-    return {
-        "imported": 0,
-        "duplicates": 0,
-        "errors": ["Import functionality not yet implemented"]
-    }
+    # Verify account belongs to user
+    from ...crud import account as crud_account
+    account = crud_account.account.get_by_id_and_user(db, id=account_id, user_id=current_user.id)
+    if not account:
+        raise HTTPException(status_code=404, detail="Account not found or access denied")
+    
+    try:
+        # Read file content
+        content = await file.read()
+        
+        # Get existing transactions for duplicate detection
+        existing_transactions, _ = crud_transaction.transaction.get_multi_with_filters(
+            db, skip=0, limit=10000, user_id=current_user.id, 
+            filters={'account_id': account_id}
+        )
+        
+        # Import transactions
+        from ...services.csv_importer import import_transactions_from_csv
+        transactions_to_create, import_summary = import_transactions_from_csv(
+            content, account_uuid, file.filename, existing_transactions
+        )
+        
+        # Create transactions in database
+        created_transactions = []
+        for transaction_data in transactions_to_create:
+            try:
+                transaction = crud_transaction.transaction.create(db, obj_in=transaction_data)
+                created_transactions.append(transaction)
+            except Exception as e:
+                import_summary["errors"].append(f"Failed to create transaction: {str(e)}")
+        
+        # Update import summary with actual created count
+        import_summary["imported"] = len(created_transactions)
+        
+        return import_summary
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Import failed: {str(e)}")
 
 
 @router.get("/search", response_model=TransactionListResponse)

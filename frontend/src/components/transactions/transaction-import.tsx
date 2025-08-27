@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { transactionApi } from '@/lib/api/transactions';
+import { accountApi, Account } from '@/lib/api/accounts';
 
 interface TransactionImportProps {
   onClose: () => void;
@@ -12,6 +13,8 @@ interface TransactionImportProps {
 export function TransactionImport({ onClose, onSuccess, defaultAccountId }: TransactionImportProps) {
   const [file, setFile] = useState<File | null>(null);
   const [accountId, setAccountId] = useState(defaultAccountId || '');
+  const [accounts, setAccounts] = useState<Account[]>([]);
+  const [loadingAccounts, setLoadingAccounts] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const [result, setResult] = useState<{
@@ -20,6 +23,27 @@ export function TransactionImport({ onClose, onSuccess, defaultAccountId }: Tran
     errors: string[];
   } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Load user's accounts
+  useEffect(() => {
+    const loadAccounts = async () => {
+      try {
+        const userAccounts = await accountApi.getAccounts();
+        setAccounts(userAccounts);
+        
+        // If no default account ID provided, select the first account
+        if (!defaultAccountId && userAccounts.length > 0) {
+          setAccountId(userAccounts[0].id);
+        }
+      } catch (error) {
+        console.error('Failed to load accounts:', error);
+      } finally {
+        setLoadingAccounts(false);
+      }
+    };
+
+    loadAccounts();
+  }, [defaultAccountId]);
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
@@ -96,15 +120,30 @@ export function TransactionImport({ onClose, onSuccess, defaultAccountId }: Tran
               {/* Account Selection */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Account ID
+                  Account
                 </label>
-                <input
-                  type="text"
-                  value={accountId}
-                  onChange={(e) => setAccountId(e.target.value)}
-                  placeholder="Enter account ID"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                />
+                {loadingAccounts ? (
+                  <div className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-50 text-sm text-gray-500">
+                    Loading accounts...
+                  </div>
+                ) : accounts.length > 0 ? (
+                  <select
+                    value={accountId}
+                    onChange={(e) => setAccountId(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                  >
+                    <option value="">Select an account</option>
+                    {accounts.map((account) => (
+                      <option key={account.id} value={account.id}>
+                        {account.name} ({account.institution}) - {account.account_type}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <div className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-50 text-sm text-gray-500">
+                    No accounts found. Please create an account first.
+                  </div>
+                )}
               </div>
 
               {/* File Upload */}
@@ -149,7 +188,9 @@ export function TransactionImport({ onClose, onSuccess, defaultAccountId }: Tran
                       </label>
                       <p className="pl-1">or drag and drop</p>
                     </div>
-                    <p className="text-xs text-gray-500">CSV files only</p>
+                    <p className="text-xs text-gray-500">
+                      CSV files only. Expected columns: Date, Description, Amount (or Debit/Credit)
+                    </p>
                   </div>
                 </div>
                 {file && (
@@ -157,6 +198,18 @@ export function TransactionImport({ onClose, onSuccess, defaultAccountId }: Tran
                     Selected: {file.name}
                   </p>
                 )}
+              </div>
+
+              {/* Help Section */}
+              <div className="bg-blue-50 border border-blue-200 rounded-md p-3">
+                <h4 className="text-sm font-medium text-blue-800 mb-2">CSV Format Requirements:</h4>
+                <ul className="text-xs text-blue-700 space-y-1">
+                  <li>• Required columns: Date, Description, Amount (or Debit/Credit)</li>
+                  <li>• Optional columns: Reference, Check Number</li>
+                  <li>• Date formats: YYYY-MM-DD, MM/DD/YYYY, DD/MM/YYYY</li>
+                  <li>• Amounts can include currency symbols ($) and commas</li>
+                  <li>• Negative amounts or parentheses indicate expenses</li>
+                </ul>
               </div>
 
               {/* Actions */}
@@ -197,14 +250,16 @@ export function TransactionImport({ onClose, onSuccess, defaultAccountId }: Tran
                   <span className="text-sm text-gray-600">Duplicates skipped:</span>
                   <span className="text-sm font-medium text-yellow-600">{result.duplicates}</span>
                 </div>
-                {result.errors.length > 0 && (
+                {result.errors && result.errors.length > 0 && (
                   <div className="pt-2 border-t border-gray-200">
-                    <span className="text-sm text-red-600">Errors:</span>
-                    <ul className="mt-1 text-xs text-red-600 space-y-1">
-                      {result.errors.map((error, index) => (
-                        <li key={index}>• {error}</li>
-                      ))}
-                    </ul>
+                    <span className="text-sm text-red-600">Errors ({result.errors.length}):</span>
+                    <div className="mt-1 max-h-32 overflow-y-auto">
+                      <ul className="text-xs text-red-600 space-y-1">
+                        {result.errors.map((error, index) => (
+                          <li key={index}>• {error}</li>
+                        ))}
+                      </ul>
+                    </div>
                   </div>
                 )}
               </div>

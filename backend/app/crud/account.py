@@ -32,5 +32,18 @@ class CRUDAccount(CRUDBase[Account, AccountCreate, AccountUpdate]):
         db.refresh(db_obj)
         return db_obj
 
+    def get_by_id_and_user(self, db: Session, *, id: str, user_id: UUID) -> Optional[Account]:
+        """Get account by ID and verify it belongs to the user"""
+        try:
+            account_id = UUID(id)
+        except ValueError:
+            return None
+        
+        return (
+            db.query(Account)
+            .filter(Account.id == account_id, Account.user_id == user_id)
+            .first()
+        )
+
 
 account = CRUDAccount(Account)
