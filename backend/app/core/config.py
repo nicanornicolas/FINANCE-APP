@@ -19,6 +19,15 @@ class Settings(BaseSettings):
     ENVIRONMENT: str = "development"
     DEBUG: bool = True
     
+    # KRA API Configuration
+    KRA_API_BASE_URL: str = "https://itax.kra.go.ke/api/v1"
+    KRA_CLIENT_ID: str = ""
+    KRA_CLIENT_SECRET: str = ""
+    USE_MOCK_KRA: bool = True  # Set to False in production
+    
+    # Encryption key for sensitive data (KRA PINs, etc.)
+    ENCRYPTION_KEY: Optional[str] = None
+    
     class Config:
         env_file = ".env"
         extra = "ignore"
