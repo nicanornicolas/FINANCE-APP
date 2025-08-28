@@ -61,7 +61,7 @@ async def get_current_user(
     except jwt.PyJWTError:
         raise credentials_exception
     
-    user = crud_user.user.get_by_email(db, email=email)
+    user = crud_user.get_by_email(db, email=email)
     if user is None:
         raise credentials_exception
     return user
@@ -70,7 +70,7 @@ async def get_current_user(
 @router.post("/register", response_model=Token)
 async def register(user_data: UserCreate, db: Session = Depends(get_db)):
     # Check if user already exists
-    user = crud_user.user.get_by_email(db, email=user_data.email)
+    user = crud_user.get_by_email(db, email=user_data.email)
     if user:
         raise HTTPException(
             status_code=400,
@@ -78,7 +78,7 @@ async def register(user_data: UserCreate, db: Session = Depends(get_db)):
         )
     
     # Create new user
-    user = crud_user.user.create(db, obj_in=user_data)
+    user = crud_user.create(db, obj_in=user_data)
     
     # Create tokens
     access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
@@ -99,7 +99,7 @@ async def register(user_data: UserCreate, db: Session = Depends(get_db)):
 
 @router.post("/login", response_model=Token)
 async def login(user_credentials: UserLogin, db: Session = Depends(get_db)):
-    user = crud_user.user.authenticate(
+    user = crud_user.authenticate(
         db, email=user_credentials.email, password=user_credentials.password
     )
     if not user:
@@ -108,7 +108,7 @@ async def login(user_credentials: UserLogin, db: Session = Depends(get_db)):
             detail="Incorrect email or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    elif not crud_user.user.is_active(user):
+    elif not crud_user.is_active(user):
         raise HTTPException(status_code=400, detail="Inactive user")
     
     access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
@@ -137,7 +137,7 @@ async def logout():
 
 @router.post("/forgot-password")
 async def forgot_password(forgot_data: ForgotPassword, db: Session = Depends(get_db)):
-    user = crud_user.user.get_by_email(db, email=forgot_data.email)
+    user = crud_user.get_by_email(db, email=forgot_data.email)
     if not user:
         # Don't reveal if email exists or not for security
         return {"message": "If the email exists, a reset link has been sent"}
@@ -157,7 +157,7 @@ async def refresh_token(refresh_data: dict, db: Session = Depends(get_db)):
         if email is None:
             raise HTTPException(status_code=401, detail="Invalid refresh token")
         
-        user = crud_user.user.get_by_email(db, email=email)
+        user = crud_user.get_by_email(db, email=email)
         if user is None:
             raise HTTPException(status_code=401, detail="User not found")
         
