@@ -36,7 +36,7 @@ class Transaction(Base):
     # Relationships
     account = relationship("Account", back_populates="transactions")
     category = relationship("Category", foreign_keys=[category_id], back_populates="transactions")
-    subcategory = relationship("Category", foreign_keys=[subcategory_id])
+    subcategory = relationship("Category", foreign_keys=[subcategory_id], post_update=True)
 
     def __repr__(self):
         return f"<Transaction(id={self.id}, amount={self.amount}, description={self.description})>"
