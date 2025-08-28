@@ -166,9 +166,9 @@ class CSVImporter:
             
             # Determine type based on sign
             if amount < 0:
-                return abs(amount), TransactionType.expense
+                return abs(amount), TransactionType.EXPENSE
             else:
-                return amount, TransactionType.income
+                return amount, TransactionType.INCOME
         
         else:
             # Separate debit/credit columns
@@ -180,10 +180,10 @@ class CSVImporter:
             
             if debit_str:
                 amount = self._parse_decimal(debit_str)
-                return amount, TransactionType.expense
+                return amount, TransactionType.EXPENSE
             elif credit_str:
                 amount = self._parse_decimal(credit_str)
-                return amount, TransactionType.income
+                return amount, TransactionType.INCOME
             else:
                 raise ValueError("Either debit or credit amount is required")
 
