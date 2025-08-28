@@ -24,6 +24,8 @@ class User(Base):
     accounts = relationship("Account", back_populates="user", cascade="all, delete-orphan")
     categories = relationship("Category", back_populates="user", cascade="all, delete-orphan")
     tax_filings = relationship("TaxFiling", back_populates="user", cascade="all, delete-orphan")
+    kra_taxpayer = relationship("KRATaxpayer", back_populates="user", uselist=False, cascade="all, delete-orphan")
+    business_entities = relationship("BusinessEntity", back_populates="user", cascade="all, delete-orphan")
 
     def __repr__(self):
         return f"<User(id={self.id}, email={self.email})>"
