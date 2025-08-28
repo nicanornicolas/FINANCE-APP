@@ -112,16 +112,32 @@
   - Write tests for ML categorization service
   - _Requirements: 3.1, 3.2, 3.3, 3.5_
 
-- [ ] 10. Build tax preparation and calculation engine
-  - Create tax form data models (1040, Schedule C, etc.)
-  - Implement tax deduction identification logic
-  - Build tax calculation engine with current tax rules
-  - Create tax form generation and population
-  - Add tax year management and historical data
-  - Write comprehensive tests for tax calculations
-  - _Requirements: 5.1, 5.2, 5.3, 5.5_
+- [x] 10. Build KRA tax preparation and calculation engine
 
-- [ ] 11. Develop business features and multi-entity support
+
+
+
+
+
+
+  - Create KRA tax form data models (Individual Income Tax, VAT, Withholding Tax)
+  - Implement KRA API client for iTax system integration
+  - Build KRA PIN validation and taxpayer verification service
+  - Implement Kenyan tax deduction identification logic according to KRA guidelines
+  - Build tax calculation engine with current KRA tax rates and rules
+  - Create KRA tax form generation and population
+  - Add KRA payment integration for tax settlements
+  - Add tax year management and historical KRA data
+  - Write comprehensive tests for KRA tax calculations and API integration
+  - _Requirements: 5.1, 5.2, 5.3, 5.4, 5.5_
+
+- [x] 11. Develop business features and multi-entity support
+
+
+
+
+
+
   - Create business account and entity models
   - Implement invoice generation and management
   - Build client management system
@@ -130,7 +146,12 @@
   - Write tests for business functionality
   - _Requirements: 6.1, 6.2, 6.3, 6.4, 6.5_
 
-- [ ] 12. Implement external integrations framework
+- [x] 12. Implement external integrations framework
+
+
+
+
+
   - Create integration service architecture
   - Build bank API connection framework using Open Banking
   - Implement OAuth flow for external service connections
@@ -175,13 +196,14 @@
   - Write performance tests and benchmarks
   - _Requirements: 7.3, 8.4_
 
-- [ ] 17. Build tax filing integration and e-filing capabilities
-  - Integrate with tax filing APIs (IRS e-file, state systems)
-  - Implement tax form validation and error checking
-  - Create filing status tracking and monitoring
-  - Add tax filing history and document storage
-  - Build tax amendment and correction functionality
-  - Write integration tests for tax filing services
+- [ ] 17. Build KRA tax filing integration and e-filing capabilities
+  - Integrate with KRA iTax APIs for electronic filing
+  - Implement KRA tax form validation and error checking
+  - Create KRA filing status tracking and monitoring
+  - Add KRA tax filing history and document storage
+  - Build KRA tax amendment and correction functionality
+  - Implement KRA payment gateway integration
+  - Write integration tests for KRA tax filing services
   - _Requirements: 5.4, 5.5_
 
 - [ ] 18. Implement accounting software integrations

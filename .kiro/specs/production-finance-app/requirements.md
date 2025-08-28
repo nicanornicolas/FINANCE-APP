@@ -2,7 +2,7 @@
 
 ## Introduction
 
-This document outlines the requirements for transforming the existing basic Streamlit finance application into a production-ready financial management platform with comprehensive tax filing capabilities. The new system will provide enterprise-grade features including multi-user support, advanced financial analytics, automated tax preparation, secure data handling, and a modern web interface suitable for both personal and business use.
+This document outlines the requirements for transforming the existing basic Streamlit finance application into a production-ready financial management platform with comprehensive KRA tax filing capabilities. The new system will provide enterprise-grade features including multi-user support, advanced financial analytics, automated tax preparation with KRA integration, secure data handling, and a modern web interface suitable for both personal and business use in the Kenyan market.
 
 ## Requirements
 
@@ -56,15 +56,15 @@ This document outlines the requirements for transforming the existing basic Stre
 
 ### Requirement 5
 
-**User Story:** As a user, I want automated tax preparation and filing capabilities, so that I can efficiently handle my tax obligations with minimal manual effort.
+**User Story:** As a user, I want automated tax preparation and filing capabilities with KRA integration, so that I can efficiently handle my Kenyan tax obligations with minimal manual effort.
 
 #### Acceptance Criteria
 
-1. WHEN tax season arrives THEN the system SHALL automatically identify tax-deductible expenses and income
-2. WHEN preparing tax forms THEN the system SHALL populate standard tax forms (1040, Schedule C, etc.) with relevant data
-3. WHEN calculating taxes THEN the system SHALL apply current tax rules and regulations accurately
-4. WHEN filing taxes THEN the system SHALL integrate with e-filing services for direct submission
-5. IF tax rules change THEN the system SHALL update calculations and notify users of impacts
+1. WHEN tax season arrives THEN the system SHALL automatically identify tax-deductible expenses and income according to KRA guidelines
+2. WHEN preparing tax returns THEN the system SHALL populate KRA tax forms (Individual Income Tax, Withholding Tax, etc.) with relevant data
+3. WHEN calculating taxes THEN the system SHALL apply current Kenyan tax rules and KRA regulations accurately
+4. WHEN filing taxes THEN the system SHALL integrate with KRA iTax system for direct submission via KRA APIs
+5. IF KRA tax rules change THEN the system SHALL update calculations and notify users of impacts
 
 ### Requirement 6
 
