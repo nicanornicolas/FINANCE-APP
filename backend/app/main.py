@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from .api.routers import health, transactions, auth, accounts, reporting, categorization, categories
+from .api.routers import health, transactions, auth, accounts, reporting, categorization, categories, kra_tax, business, integrations
 
 app = FastAPI(title="Finance Backend", version="0.1.0")
 
@@ -22,3 +22,6 @@ app.include_router(transactions.router, prefix="/transactions", tags=["transacti
 app.include_router(reporting.router, prefix="/api", tags=["reporting"])
 app.include_router(categorization.router, prefix="/api", tags=["categorization"])
 app.include_router(categories.router, prefix="/api", tags=["categories"])
+app.include_router(kra_tax.router, prefix="/api/kra", tags=["kra-tax"])
+app.include_router(business.router, prefix="/api/business", tags=["business"])
+app.include_router(integrations.router, prefix="/api/integrations", tags=["integrations"])
