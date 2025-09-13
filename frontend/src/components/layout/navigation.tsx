@@ -37,7 +37,8 @@ export function Navigation() {
   const navigation = [
     { name: 'Dashboard', href: '/dashboard', icon: Home },
     { name: 'Transactions', href: '/dashboard/transactions', icon: CreditCard },
-    { name: 'Reports', href: '/reports', icon: PieChart },
+    { name: 'Reports', href: '/dashboard/reports', icon: PieChart },
+    { name: 'Budget', href: '/dashboard/budget', icon: PieChart },
     { name: 'Tax', href: '/tax', icon: FileText },
     { name: 'Settings', href: '/settings', icon: Settings },
   ];
