@@ -240,6 +240,120 @@ class KRAAPIClient:
         except Exception as e:
             logger.error(f"Error getting tax rates for {tax_year}: {str(e)}")
             raise KRAAPIError(f"Tax rates error: {str(e)}")
+    
+    async def validate_tax_form(self, form_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Validate tax form data before submission"""
+        try:
+            return await self._make_request(
+                "POST",
+                "/tax-forms/validate",
+                form_data
+            )
+        except KRAAPIError:
+            raise
+        except Exception as e:
+            logger.error(f"Error validating tax form: {str(e)}")
+            raise KRAAPIError(f"Tax form validation error: {str(e)}")
+    
+    async def get_filing_history(self, kra_pin: str, tax_year: Optional[int] = None) -> Dict[str, Any]:
+        """Get filing history for taxpayer"""
+        try:
+            params = {"kra_pin": kra_pin}
+            if tax_year:
+                params["tax_year"] = tax_year
+            
+            return await self._make_request(
+                "GET",
+                "/tax-returns/history",
+                params
+            )
+        except KRAAPIError:
+            raise
+        except Exception as e:
+            logger.error(f"Error getting filing history: {str(e)}")
+            raise KRAAPIError(f"Filing history error: {str(e)}")
+    
+    async def amend_tax_return(self, kra_reference: str, amendment_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Submit amendment to existing tax return"""
+        try:
+            return await self._make_request(
+                "POST",
+                f"/tax-returns/{kra_reference}/amend",
+                amendment_data
+            )
+        except KRAAPIError:
+            raise
+        except Exception as e:
+            logger.error(f"Error amending tax return: {str(e)}")
+            raise KRAAPIError(f"Tax return amendment error: {str(e)}")
+    
+    async def get_filing_documents(self, kra_reference: str) -> Dict[str, Any]:
+        """Get documents associated with a filing"""
+        try:
+            return await self._make_request(
+                "GET",
+                f"/tax-returns/{kra_reference}/documents"
+            )
+        except KRAAPIError:
+            raise
+        except Exception as e:
+            logger.error(f"Error getting filing documents: {str(e)}")
+            raise KRAAPIError(f"Filing documents error: {str(e)}")
+    
+    async def upload_supporting_document(self, kra_reference: str, document_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Upload supporting document for a filing"""
+        try:
+            return await self._make_request(
+                "POST",
+                f"/tax-returns/{kra_reference}/documents",
+                document_data
+            )
+        except KRAAPIError:
+            raise
+        except Exception as e:
+            logger.error(f"Error uploading document: {str(e)}")
+            raise KRAAPIError(f"Document upload error: {str(e)}")
+    
+    async def initiate_payment(self, payment_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Initiate payment through KRA payment gateway"""
+        try:
+            return await self._make_request(
+                "POST",
+                "/payments/initiate",
+                payment_data
+            )
+        except KRAAPIError:
+            raise
+        except Exception as e:
+            logger.error(f"Error initiating payment: {str(e)}")
+            raise KRAAPIError(f"Payment initiation error: {str(e)}")
+    
+    async def confirm_payment(self, payment_reference: str, confirmation_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Confirm payment completion"""
+        try:
+            return await self._make_request(
+                "POST",
+                f"/payments/{payment_reference}/confirm",
+                confirmation_data
+            )
+        except KRAAPIError:
+            raise
+        except Exception as e:
+            logger.error(f"Error confirming payment: {str(e)}")
+            raise KRAAPIError(f"Payment confirmation error: {str(e)}")
+    
+    async def get_payment_methods(self) -> Dict[str, Any]:
+        """Get available payment methods"""
+        try:
+            return await self._make_request(
+                "GET",
+                "/payments/methods"
+            )
+        except KRAAPIError:
+            raise
+        except Exception as e:
+            logger.error(f"Error getting payment methods: {str(e)}")
+            raise KRAAPIError(f"Payment methods error: {str(e)}")
 
 
 # Mock KRA API Client for development/testing
@@ -290,4 +404,132 @@ class MockKRAAPIClient(KRAAPIClient):
                 "insurance_relief_limit": 60000,
                 "mortgage_interest_limit": 300000
             }
+        }
+    
+    async def validate_tax_form(self, form_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Mock tax form validation"""
+        errors = []
+        warnings = []
+        
+        # Mock validation logic
+        if form_data.get("total_income", 0) < 0:
+            errors.append({"field": "total_income", "message": "Total income cannot be negative"})
+        
+        if form_data.get("taxable_income", 0) > form_data.get("total_income", 0):
+            errors.append({"field": "taxable_income", "message": "Taxable income cannot exceed total income"})
+        
+        return {
+            "is_valid": len(errors) == 0,
+            "errors": errors,
+            "warnings": warnings,
+            "validation_id": f"VAL{datetime.now().strftime('%Y%m%d%H%M%S')}"
+        }
+    
+    async def get_filing_history(self, kra_pin: str, tax_year: Optional[int] = None) -> Dict[str, Any]:
+        """Mock filing history"""
+        filings = [
+            {
+                "kra_reference": f"KRA2023{kra_pin[-4:]}001",
+                "tax_year": 2023,
+                "filing_type": "individual",
+                "status": "accepted",
+                "submission_date": "2024-03-15T10:30:00Z",
+                "tax_due": 45000.00,
+                "amount_paid": 45000.00
+            },
+            {
+                "kra_reference": f"KRA2022{kra_pin[-4:]}001",
+                "tax_year": 2022,
+                "filing_type": "individual",
+                "status": "paid",
+                "submission_date": "2023-03-10T14:20:00Z",
+                "tax_due": 38000.00,
+                "amount_paid": 38000.00
+            }
+        ]
+        
+        if tax_year:
+            filings = [f for f in filings if f["tax_year"] == tax_year]
+        
+        return {"filings": filings, "total_count": len(filings)}
+    
+    async def amend_tax_return(self, kra_reference: str, amendment_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Mock tax return amendment"""
+        return {
+            "amendment_id": f"AMD{datetime.now().strftime('%Y%m%d%H%M%S')}",
+            "original_reference": kra_reference,
+            "status": "submitted",
+            "submission_date": datetime.now().isoformat(),
+            "processing_time": "5-10 business days"
+        }
+    
+    async def get_filing_documents(self, kra_reference: str) -> Dict[str, Any]:
+        """Mock filing documents"""
+        return {
+            "documents": [
+                {
+                    "document_id": "DOC001",
+                    "document_type": "tax_return",
+                    "filename": f"{kra_reference}_return.pdf",
+                    "upload_date": "2024-03-15T10:30:00Z",
+                    "size": 245760,
+                    "download_url": f"https://itax.kra.go.ke/documents/{kra_reference}/DOC001"
+                },
+                {
+                    "document_id": "DOC002",
+                    "document_type": "receipt",
+                    "filename": f"{kra_reference}_receipt.pdf",
+                    "upload_date": "2024-03-15T10:35:00Z",
+                    "size": 128000,
+                    "download_url": f"https://itax.kra.go.ke/documents/{kra_reference}/DOC002"
+                }
+            ]
+        }
+    
+    async def upload_supporting_document(self, kra_reference: str, document_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Mock document upload"""
+        return {
+            "document_id": f"DOC{datetime.now().strftime('%Y%m%d%H%M%S')}",
+            "status": "uploaded",
+            "filename": document_data.get("filename", "document.pdf"),
+            "upload_date": datetime.now().isoformat(),
+            "verification_status": "pending"
+        }
+    
+    async def initiate_payment(self, payment_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Mock payment initiation"""
+        return {
+            "payment_reference": f"PAY{datetime.now().strftime('%Y%m%d%H%M%S')}",
+            "amount": payment_data["amount"],
+            "payment_url": "https://payments.kra.go.ke/mock-payment",
+            "expires_at": (datetime.now() + timedelta(hours=1)).isoformat(),
+            "payment_methods": ["bank_transfer", "mobile_money", "card"]
+        }
+    
+    async def get_payment_methods(self) -> Dict[str, Any]:
+        """Mock payment methods"""
+        return {
+            "methods": [
+                {
+                    "method_id": "bank_transfer",
+                    "name": "Bank Transfer",
+                    "description": "Direct bank transfer to KRA account",
+                    "processing_time": "1-2 business days",
+                    "fees": 0
+                },
+                {
+                    "method_id": "mobile_money",
+                    "name": "Mobile Money",
+                    "description": "M-Pesa, Airtel Money, T-Kash",
+                    "processing_time": "Instant",
+                    "fees": 25
+                },
+                {
+                    "method_id": "card",
+                    "name": "Credit/Debit Card",
+                    "description": "Visa, Mastercard",
+                    "processing_time": "Instant",
+                    "fees": 50
+                }
+            ]
         }

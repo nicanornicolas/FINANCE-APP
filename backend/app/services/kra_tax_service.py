@@ -9,7 +9,10 @@ from decimal import Decimal
 from datetime import datetime, date
 from sqlalchemy.orm import Session
 
-from app.crud.kra_tax import kra_taxpayer, kra_tax_filing, kra_tax_payment, kra_tax_deduction
+from app.crud.kra_tax import (
+    kra_taxpayer, kra_tax_filing, kra_tax_payment, kra_tax_deduction,
+    kra_tax_amendment, kra_tax_document, kra_filing_validation
+)
 from app.crud.transaction import transaction as transaction_crud
 from app.services.kra_tax_calculator import KRATaxCalculator
 from app.services.kra_api_client import KRAAPIClient, MockKRAAPIClient, KRAAPIError
@@ -19,6 +22,13 @@ from app.schemas.kra_tax import (
     KRATaxCalculationRequest, KRATaxCalculationResponse,
     KRAPINValidationRequest, KRAPINValidationResponse,
     KRATaxDeductionCreate,
+    KRATaxAmendmentCreate, KRATaxAmendmentResponse,
+    KRATaxDocumentCreate, KRATaxDocumentResponse,
+    KRAFilingValidationResponse,
+    KRAFormValidationRequest, KRAFormValidationResponse,
+    KRAFilingHistoryResponse,
+    KRAPaymentInitiationRequest, KRAPaymentInitiationResponse,
+    KRAPaymentConfirmationRequest, KRAPaymentMethodsResponse,
     KRAFilingType, KRAFilingStatus
 )
 from app.core.config import settings
@@ -276,6 +286,318 @@ class KRATaxService:
             }
             for deduction in deductions_data
         ]
+    
+    async def validate_tax_form(self, db: Session, *, user_id: UUID, filing_id: UUID) -> KRAFormValidationResponse:
+        """Validate tax form before submission"""
+        filing = kra_tax_filing.get(db, id=filing_id)
+        if not filing or filing.user_id != user_id:
+            raise ValueError("Filing not found or not owned by user")
+        
+        if not filing.forms_data:
+            raise ValueError("No form data to validate")
+        
+        try:
+            # Prepare validation request
+            validation_request = KRAFormValidationRequest(
+                filing_type=filing.filing_type,
+                form_data=filing.forms_data,
+                tax_year=filing.tax_year
+            )
+            
+            # Validate with KRA
+            async with self.kra_client as client:
+                validation_result = await client.validate_tax_form(validation_request.dict())
+            
+            # Store validation result
+            kra_filing_validation.create_validation(
+                db,
+                filing_id=filing.id,
+                validation_data=validation_result
+            )
+            
+            return KRAFormValidationResponse(**validation_result)
+            
+        except KRAAPIError as e:
+            logger.error(f"Form validation failed: {e.message}")
+            raise ValueError(f"Form validation failed: {e.message}")
+    
+    async def get_filing_history(self, db: Session, *, user_id: UUID, tax_year: Optional[int] = None) -> KRAFilingHistoryResponse:
+        """Get filing history from KRA"""
+        taxpayer_obj = kra_taxpayer.get_by_user_id(db, user_id=user_id)
+        if not taxpayer_obj:
+            raise ValueError("Taxpayer not registered")
+        
+        try:
+            async with self.kra_client as client:
+                history_data = await client.get_filing_history(taxpayer_obj.kra_pin, tax_year)
+            
+            return KRAFilingHistoryResponse(**history_data)
+            
+        except KRAAPIError as e:
+            logger.error(f"Failed to get filing history: {e.message}")
+            raise ValueError(f"Filing history error: {e.message}")
+    
+    def create_amendment(self, db: Session, *, amendment_data: KRATaxAmendmentCreate, user_id: UUID) -> KRATaxAmendmentResponse:
+        """Create tax filing amendment"""
+        # Get original filing
+        original_filing = kra_tax_filing.get(db, id=amendment_data.original_filing_id)
+        if not original_filing or original_filing.user_id != user_id:
+            raise ValueError("Original filing not found or not owned by user")
+        
+        if original_filing.status not in [KRAFilingStatus.ACCEPTED, KRAFilingStatus.PAID]:
+            raise ValueError("Can only amend accepted or paid filings")
+        
+        # Create amendment
+        amendment = kra_tax_amendment.create_with_user(
+            db,
+            obj_in=amendment_data,
+            user_id=user_id,
+            original_data=original_filing.forms_data or {}
+        )
+        
+        return KRATaxAmendmentResponse.from_orm(amendment)
+    
+    async def submit_amendment(self, db: Session, *, user_id: UUID, amendment_id: UUID) -> Dict[str, Any]:
+        """Submit amendment to KRA"""
+        amendment = kra_tax_amendment.get(db, id=amendment_id)
+        if not amendment or amendment.user_id != user_id:
+            raise ValueError("Amendment not found or not owned by user")
+        
+        if amendment.status != "draft":
+            raise ValueError("Only draft amendments can be submitted")
+        
+        # Get original filing
+        original_filing = kra_tax_filing.get(db, id=amendment.original_filing_id)
+        if not original_filing:
+            raise ValueError("Original filing not found")
+        
+        try:
+            # Prepare amendment data
+            amendment_data = {
+                "original_reference": original_filing.kra_reference,
+                "reason": amendment.reason,
+                "amended_data": amendment.amended_data,
+                "changes_summary": amendment.changes_summary
+            }
+            
+            # Submit to KRA
+            async with self.kra_client as client:
+                submission_response = await client.amend_tax_return(
+                    original_filing.kra_reference,
+                    amendment_data
+                )
+            
+            # Update amendment status
+            kra_tax_amendment.update_status(
+                db,
+                amendment_id=amendment.id,
+                status="submitted",
+                amendment_reference=submission_response.get("amendment_id")
+            )
+            
+            return submission_response
+            
+        except KRAAPIError as e:
+            logger.error(f"Amendment submission failed: {e.message}")
+            raise ValueError(f"Amendment submission failed: {e.message}")
+    
+    def upload_document(self, db: Session, *, document_data: KRATaxDocumentCreate, user_id: UUID, file_content: bytes) -> KRATaxDocumentResponse:
+        """Upload supporting document"""
+        import os
+        import uuid
+        from app.core.config import settings
+        
+        # Create file path
+        file_extension = os.path.splitext(document_data.filename)[1]
+        unique_filename = f"{uuid.uuid4()}{file_extension}"
+        file_path = os.path.join(getattr(settings, 'UPLOAD_DIR', '/tmp'), 'kra_documents', unique_filename)
+        
+        # Ensure directory exists
+        os.makedirs(os.path.dirname(file_path), exist_ok=True)
+        
+        # Save file
+        with open(file_path, 'wb') as f:
+            f.write(file_content)
+        
+        # Create document record
+        document = kra_tax_document.create_with_user(
+            db,
+            obj_in=document_data,
+            user_id=user_id,
+            file_path=file_path
+        )
+        
+        return KRATaxDocumentResponse.from_orm(document)
+    
+    async def upload_document_to_kra(self, db: Session, *, user_id: UUID, document_id: UUID) -> Dict[str, Any]:
+        """Upload document to KRA system"""
+        document = kra_tax_document.get(db, id=document_id)
+        if not document or document.user_id != user_id:
+            raise ValueError("Document not found or not owned by user")
+        
+        if not document.filing_id:
+            raise ValueError("Document must be associated with a filing")
+        
+        filing = kra_tax_filing.get(db, id=document.filing_id)
+        if not filing or not filing.kra_reference:
+            raise ValueError("Filing not found or not submitted to KRA")
+        
+        try:
+            # Read file content
+            with open(document.file_path, 'rb') as f:
+                file_content = f.read()
+            
+            # Prepare upload data
+            upload_data = {
+                "filename": document.original_filename,
+                "document_type": document.document_type,
+                "file_content": file_content.hex(),  # Convert to hex for JSON
+                "mime_type": document.mime_type
+            }
+            
+            # Upload to KRA
+            async with self.kra_client as client:
+                upload_response = await client.upload_supporting_document(
+                    filing.kra_reference,
+                    upload_data
+                )
+            
+            # Update document with KRA reference
+            kra_tax_document.update_verification_status(
+                db,
+                document_id=document.id,
+                status="uploaded",
+                kra_document_id=upload_response.get("document_id")
+            )
+            
+            return upload_response
+            
+        except KRAAPIError as e:
+            logger.error(f"Document upload to KRA failed: {e.message}")
+            raise ValueError(f"Document upload failed: {e.message}")
+        except Exception as e:
+            logger.error(f"Error uploading document: {str(e)}")
+            raise ValueError(f"Document upload error: {str(e)}")
+    
+    async def initiate_payment(self, db: Session, *, user_id: UUID, payment_request: KRAPaymentInitiationRequest) -> KRAPaymentInitiationResponse:
+        """Initiate tax payment"""
+        filing = kra_tax_filing.get(db, id=payment_request.filing_id)
+        if not filing or filing.user_id != user_id:
+            raise ValueError("Filing not found or not owned by user")
+        
+        if not filing.tax_due or filing.tax_due <= 0:
+            raise ValueError("No tax due for this filing")
+        
+        try:
+            # Prepare payment data
+            payment_data = {
+                "kra_reference": filing.kra_reference,
+                "amount": float(payment_request.amount),
+                "payment_method": payment_request.payment_method,
+                "return_url": payment_request.return_url,
+                "taxpayer_pin": filing.taxpayer.kra_pin if filing.taxpayer else None
+            }
+            
+            # Initiate payment with KRA
+            async with self.kra_client as client:
+                payment_response = await client.initiate_payment(payment_data)
+            
+            # Create payment record
+            from app.schemas.kra_tax import KRATaxPaymentCreate
+            payment_create = KRATaxPaymentCreate(
+                filing_id=filing.id,
+                amount=payment_request.amount,
+                payment_method=payment_request.payment_method
+            )
+            
+            kra_tax_payment.create_payment(
+                db,
+                obj_in=payment_create,
+                payment_reference=payment_response["payment_reference"]
+            )
+            
+            return KRAPaymentInitiationResponse(**payment_response)
+            
+        except KRAAPIError as e:
+            logger.error(f"Payment initiation failed: {e.message}")
+            raise ValueError(f"Payment initiation failed: {e.message}")
+    
+    async def confirm_payment(self, db: Session, *, user_id: UUID, confirmation_request: KRAPaymentConfirmationRequest) -> Dict[str, Any]:
+        """Confirm payment completion"""
+        payment = kra_tax_payment.get_by_reference(db, payment_reference=confirmation_request.payment_reference)
+        if not payment:
+            raise ValueError("Payment not found")
+        
+        # Verify user owns the filing
+        filing = kra_tax_filing.get(db, id=payment.filing_id)
+        if not filing or filing.user_id != user_id:
+            raise ValueError("Payment not owned by user")
+        
+        try:
+            # Confirm with KRA
+            async with self.kra_client as client:
+                confirmation_response = await client.confirm_payment(
+                    confirmation_request.payment_reference,
+                    confirmation_request.dict()
+                )
+            
+            # Update payment status
+            kra_tax_payment.update_payment_status(
+                db,
+                payment_id=payment.id,
+                status="completed",
+                kra_receipt=confirmation_response.get("receipt_number")
+            )
+            
+            # Update filing status if fully paid
+            total_payments = sum(p.amount for p in kra_tax_payment.get_by_filing_id(db, filing_id=filing.id) if p.status == "completed")
+            if total_payments >= filing.tax_due:
+                kra_tax_filing.update_status(db, filing_id=filing.id, status=KRAFilingStatus.PAID)
+            
+            return confirmation_response
+            
+        except KRAAPIError as e:
+            logger.error(f"Payment confirmation failed: {e.message}")
+            raise ValueError(f"Payment confirmation failed: {e.message}")
+    
+    async def get_payment_methods(self) -> KRAPaymentMethodsResponse:
+        """Get available payment methods"""
+        try:
+            async with self.kra_client as client:
+                methods_data = await client.get_payment_methods()
+            
+            return KRAPaymentMethodsResponse(**methods_data)
+            
+        except KRAAPIError as e:
+            logger.error(f"Failed to get payment methods: {e.message}")
+            raise ValueError(f"Payment methods error: {e.message}")
+    
+    def get_user_documents(self, db: Session, *, user_id: UUID, filing_id: Optional[UUID] = None) -> List[KRATaxDocumentResponse]:
+        """Get user's tax documents"""
+        if filing_id:
+            documents = kra_tax_document.get_by_filing_id(db, filing_id=filing_id)
+        else:
+            documents = kra_tax_document.get_by_user_id(db, user_id=user_id)
+        
+        return [KRATaxDocumentResponse.from_orm(doc) for doc in documents]
+    
+    def get_user_amendments(self, db: Session, *, user_id: UUID, filing_id: Optional[UUID] = None) -> List[KRATaxAmendmentResponse]:
+        """Get user's tax amendments"""
+        if filing_id:
+            amendments = kra_tax_amendment.get_by_filing_id(db, filing_id=filing_id)
+        else:
+            amendments = kra_tax_amendment.get_by_user_id(db, user_id=user_id)
+        
+        return [KRATaxAmendmentResponse.from_orm(amendment) for amendment in amendments]
+    
+    def get_filing_validations(self, db: Session, *, user_id: UUID, filing_id: UUID) -> List[KRAFilingValidationResponse]:
+        """Get filing validation history"""
+        filing = kra_tax_filing.get(db, id=filing_id)
+        if not filing or filing.user_id != user_id:
+            raise ValueError("Filing not found or not owned by user")
+        
+        validations = kra_filing_validation.get_by_filing_id(db, filing_id=filing_id)
+        return [KRAFilingValidationResponse.from_orm(validation) for validation in validations]
 
 
 # Create service instance
