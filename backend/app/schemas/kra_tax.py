@@ -268,3 +268,164 @@ class KRAFilingSubmissionResponse(BaseModel):
     status: str
     receipt_url: Optional[str]
     next_steps: List[str]
+
+
+# KRA Tax Amendment Schemas
+class KRATaxAmendmentBase(BaseModel):
+    reason: str = Field(..., min_length=10, max_length=1000)
+    amended_data: Dict[str, Any]
+
+
+class KRATaxAmendmentCreate(KRATaxAmendmentBase):
+    original_filing_id: UUID
+
+
+class KRATaxAmendmentUpdate(BaseModel):
+    reason: Optional[str] = Field(None, min_length=10, max_length=1000)
+    amended_data: Optional[Dict[str, Any]]
+    status: Optional[str]
+    processing_notes: Optional[str]
+
+
+class KRATaxAmendmentResponse(KRATaxAmendmentBase):
+    id: UUID
+    original_filing_id: UUID
+    user_id: UUID
+    amendment_reference: Optional[str]
+    original_data: Dict[str, Any]
+    changes_summary: Optional[Dict[str, Any]]
+    status: str
+    submission_date: Optional[datetime]
+    processing_notes: Optional[str]
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+# KRA Tax Document Schemas
+class KRATaxDocumentBase(BaseModel):
+    document_type: str = Field(..., min_length=1, max_length=50)
+    filename: str = Field(..., min_length=1, max_length=255)
+
+
+class KRATaxDocumentCreate(KRATaxDocumentBase):
+    filing_id: Optional[UUID] = None
+    file_content: bytes
+    mime_type: str
+
+
+class KRATaxDocumentUpdate(BaseModel):
+    verification_status: Optional[str]
+    metadata: Optional[Dict[str, Any]]
+
+
+class KRATaxDocumentResponse(KRATaxDocumentBase):
+    id: UUID
+    filing_id: Optional[UUID]
+    user_id: UUID
+    original_filename: str
+    file_path: str
+    file_size: int
+    mime_type: str
+    kra_document_id: Optional[str]
+    upload_date: datetime
+    verification_status: str
+    metadata: Optional[Dict[str, Any]]
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+# KRA Filing Validation Schemas
+class KRAFilingValidationResponse(BaseModel):
+    id: UUID
+    filing_id: UUID
+    validation_id: Optional[str]
+    is_valid: bool
+    errors: Optional[List[Dict[str, Any]]]
+    warnings: Optional[List[Dict[str, Any]]]
+    validation_date: datetime
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+# KRA Filing History Schemas
+class KRAFilingHistoryItem(BaseModel):
+    kra_reference: str
+    tax_year: int
+    filing_type: str
+    status: str
+    submission_date: datetime
+    tax_due: Optional[Decimal]
+    amount_paid: Optional[Decimal]
+
+
+class KRAFilingHistoryResponse(BaseModel):
+    filings: List[KRAFilingHistoryItem]
+    total_count: int
+
+
+# KRA Payment Schemas
+class KRAPaymentInitiationRequest(BaseModel):
+    filing_id: UUID
+    amount: Decimal = Field(..., gt=0)
+    payment_method: str
+    return_url: Optional[str]
+
+
+class KRAPaymentInitiationResponse(BaseModel):
+    payment_reference: str
+    amount: Decimal
+    payment_url: str
+    expires_at: datetime
+    payment_methods: List[str]
+
+
+class KRAPaymentConfirmationRequest(BaseModel):
+    payment_reference: str
+    transaction_id: str
+    payment_method: str
+
+
+class KRAPaymentMethodResponse(BaseModel):
+    method_id: str
+    name: str
+    description: str
+    processing_time: str
+    fees: Decimal
+
+
+class KRAPaymentMethodsResponse(BaseModel):
+    methods: List[KRAPaymentMethodResponse]
+
+
+# KRA Form Validation Schemas
+class KRAFormValidationRequest(BaseModel):
+    filing_type: KRAFilingType
+    form_data: Dict[str, Any]
+    tax_year: int
+
+
+class KRAFormValidationError(BaseModel):
+    field: str
+    message: str
+    error_code: Optional[str]
+
+
+class KRAFormValidationWarning(BaseModel):
+    field: str
+    message: str
+    suggestion: Optional[str]
+
+
+class KRAFormValidationResponse(BaseModel):
+    is_valid: bool
+    errors: List[KRAFormValidationError]
+    warnings: List[KRAFormValidationWarning]
+    validation_id: str
