@@ -7,12 +7,17 @@ from sqlalchemy.orm import Session
 from sqlalchemy import and_, or_, desc
 
 from app.crud.base import CRUDBase
-from app.models.kra_tax import KRATaxpayer, KRATaxFiling, KRATaxPayment, KRATaxDeduction
+from app.models.kra_tax import (
+    KRATaxpayer, KRATaxFiling, KRATaxPayment, KRATaxDeduction,
+    KRATaxAmendment, KRATaxDocument, KRAFilingValidation
+)
 from app.schemas.kra_tax import (
     KRATaxpayerCreate, KRATaxpayerUpdate,
     KRATaxFilingCreate, KRATaxFilingUpdate,
     KRATaxPaymentCreate,
-    KRATaxDeductionCreate, KRATaxDeductionUpdate
+    KRATaxDeductionCreate, KRATaxDeductionUpdate,
+    KRATaxAmendmentCreate, KRATaxAmendmentUpdate,
+    KRATaxDocumentCreate, KRATaxDocumentUpdate
 )
 
 
@@ -239,8 +244,182 @@ class CRUDKRATaxDeduction(CRUDBase[KRATaxDeduction, KRATaxDeductionCreate, KRATa
         return db_obj
 
 
+class CRUDKRATaxAmendment(CRUDBase[KRATaxAmendment, KRATaxAmendmentCreate, KRATaxAmendmentUpdate]):
+    """CRUD operations for KRA Tax Amendment"""
+    
+    def get_by_filing_id(self, db: Session, *, filing_id: UUID) -> List[KRATaxAmendment]:
+        """Get amendments by original filing ID"""
+        return (
+            db.query(KRATaxAmendment)
+            .filter(KRATaxAmendment.original_filing_id == filing_id)
+            .order_by(desc(KRATaxAmendment.created_at))
+            .all()
+        )
+    
+    def get_by_user_id(self, db: Session, *, user_id: UUID, skip: int = 0, limit: int = 100) -> List[KRATaxAmendment]:
+        """Get amendments by user ID"""
+        return (
+            db.query(KRATaxAmendment)
+            .filter(KRATaxAmendment.user_id == user_id)
+            .order_by(desc(KRATaxAmendment.created_at))
+            .offset(skip)
+            .limit(limit)
+            .all()
+        )
+    
+    def get_by_reference(self, db: Session, *, amendment_reference: str) -> Optional[KRATaxAmendment]:
+        """Get amendment by reference"""
+        return db.query(KRATaxAmendment).filter(KRATaxAmendment.amendment_reference == amendment_reference).first()
+    
+    def create_with_user(self, db: Session, *, obj_in: KRATaxAmendmentCreate, user_id: UUID, original_data: Dict[str, Any]) -> KRATaxAmendment:
+        """Create amendment with user ID and original data"""
+        obj_in_data = obj_in.dict()
+        obj_in_data["user_id"] = user_id
+        obj_in_data["original_data"] = original_data
+        
+        # Calculate changes summary
+        changes_summary = self._calculate_changes(original_data, obj_in_data["amended_data"])
+        obj_in_data["changes_summary"] = changes_summary
+        
+        db_obj = KRATaxAmendment(**obj_in_data)
+        db.add(db_obj)
+        db.commit()
+        db.refresh(db_obj)
+        return db_obj
+    
+    def update_status(self, db: Session, *, amendment_id: UUID, status: str, amendment_reference: Optional[str] = None) -> Optional[KRATaxAmendment]:
+        """Update amendment status"""
+        db_obj = db.query(KRATaxAmendment).filter(KRATaxAmendment.id == amendment_id).first()
+        if db_obj:
+            db_obj.status = status
+            if amendment_reference:
+                db_obj.amendment_reference = amendment_reference
+            if status == "submitted":
+                from datetime import datetime
+                db_obj.submission_date = datetime.now()
+            db.commit()
+            db.refresh(db_obj)
+        return db_obj
+    
+    def _calculate_changes(self, original: Dict[str, Any], amended: Dict[str, Any]) -> Dict[str, Any]:
+        """Calculate summary of changes between original and amended data"""
+        changes = {}
+        
+        for key, new_value in amended.items():
+            original_value = original.get(key)
+            if original_value != new_value:
+                changes[key] = {
+                    "original": original_value,
+                    "amended": new_value
+                }
+        
+        return changes
+
+
+class CRUDKRATaxDocument(CRUDBase[KRATaxDocument, KRATaxDocumentCreate, KRATaxDocumentUpdate]):
+    """CRUD operations for KRA Tax Document"""
+    
+    def get_by_filing_id(self, db: Session, *, filing_id: UUID) -> List[KRATaxDocument]:
+        """Get documents by filing ID"""
+        return (
+            db.query(KRATaxDocument)
+            .filter(KRATaxDocument.filing_id == filing_id)
+            .order_by(desc(KRATaxDocument.upload_date))
+            .all()
+        )
+    
+    def get_by_user_id(self, db: Session, *, user_id: UUID, skip: int = 0, limit: int = 100) -> List[KRATaxDocument]:
+        """Get documents by user ID"""
+        return (
+            db.query(KRATaxDocument)
+            .filter(KRATaxDocument.user_id == user_id)
+            .order_by(desc(KRATaxDocument.upload_date))
+            .offset(skip)
+            .limit(limit)
+            .all()
+        )
+    
+    def get_by_type(self, db: Session, *, user_id: UUID, document_type: str) -> List[KRATaxDocument]:
+        """Get documents by type"""
+        return (
+            db.query(KRATaxDocument)
+            .filter(
+                and_(
+                    KRATaxDocument.user_id == user_id,
+                    KRATaxDocument.document_type == document_type
+                )
+            )
+            .order_by(desc(KRATaxDocument.upload_date))
+            .all()
+        )
+    
+    def create_with_user(self, db: Session, *, obj_in: KRATaxDocumentCreate, user_id: UUID, file_path: str) -> KRATaxDocument:
+        """Create document with user ID and file path"""
+        obj_in_data = obj_in.dict(exclude={"file_content"})
+        obj_in_data["user_id"] = user_id
+        obj_in_data["file_path"] = file_path
+        obj_in_data["original_filename"] = obj_in.filename
+        obj_in_data["file_size"] = len(obj_in.file_content)
+        
+        db_obj = KRATaxDocument(**obj_in_data)
+        db.add(db_obj)
+        db.commit()
+        db.refresh(db_obj)
+        return db_obj
+    
+    def update_verification_status(self, db: Session, *, document_id: UUID, status: str, kra_document_id: Optional[str] = None) -> Optional[KRATaxDocument]:
+        """Update document verification status"""
+        db_obj = db.query(KRATaxDocument).filter(KRATaxDocument.id == document_id).first()
+        if db_obj:
+            db_obj.verification_status = status
+            if kra_document_id:
+                db_obj.kra_document_id = kra_document_id
+            db.commit()
+            db.refresh(db_obj)
+        return db_obj
+
+
+class CRUDKRAFilingValidation(CRUDBase[KRAFilingValidation, dict, dict]):
+    """CRUD operations for KRA Filing Validation"""
+    
+    def get_by_filing_id(self, db: Session, *, filing_id: UUID) -> List[KRAFilingValidation]:
+        """Get validations by filing ID"""
+        return (
+            db.query(KRAFilingValidation)
+            .filter(KRAFilingValidation.filing_id == filing_id)
+            .order_by(desc(KRAFilingValidation.validation_date))
+            .all()
+        )
+    
+    def get_latest_validation(self, db: Session, *, filing_id: UUID) -> Optional[KRAFilingValidation]:
+        """Get latest validation for filing"""
+        return (
+            db.query(KRAFilingValidation)
+            .filter(KRAFilingValidation.filing_id == filing_id)
+            .order_by(desc(KRAFilingValidation.validation_date))
+            .first()
+        )
+    
+    def create_validation(self, db: Session, *, filing_id: UUID, validation_data: Dict[str, Any]) -> KRAFilingValidation:
+        """Create validation record"""
+        db_obj = KRAFilingValidation(
+            filing_id=filing_id,
+            validation_id=validation_data.get("validation_id"),
+            is_valid=validation_data["is_valid"],
+            errors=validation_data.get("errors"),
+            warnings=validation_data.get("warnings")
+        )
+        db.add(db_obj)
+        db.commit()
+        db.refresh(db_obj)
+        return db_obj
+
+
 # Create instances
 kra_taxpayer = CRUDKRATaxpayer(KRATaxpayer)
 kra_tax_filing = CRUDKRATaxFiling(KRATaxFiling)
 kra_tax_payment = CRUDKRATaxPayment(KRATaxPayment)
 kra_tax_deduction = CRUDKRATaxDeduction(KRATaxDeduction)
+kra_tax_amendment = CRUDKRATaxAmendment(KRATaxAmendment)
+kra_tax_document = CRUDKRATaxDocument(KRATaxDocument)
+kra_filing_validation = CRUDKRAFilingValidation(KRAFilingValidation)
