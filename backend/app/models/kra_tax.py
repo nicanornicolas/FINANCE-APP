@@ -121,3 +121,68 @@ class KRATaxDeduction(Base):
 
     # Relationships
     user = relationship("User")
+
+
+class KRATaxAmendment(Base):
+    """KRA Tax Amendment model"""
+    __tablename__ = "kra_tax_amendments"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    original_filing_id = Column(UUID(as_uuid=True), ForeignKey("kra_tax_filings.id"), nullable=False)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    amendment_reference = Column(String(50), nullable=True, unique=True)
+    reason = Column(Text, nullable=False)
+    original_data = Column(JSON, nullable=False)  # Original filing data
+    amended_data = Column(JSON, nullable=False)   # New filing data
+    changes_summary = Column(JSON, nullable=True) # Summary of changes
+    status = Column(String(20), default="draft")  # draft, submitted, accepted, rejected
+    submission_date = Column(DateTime, nullable=True)
+    processing_notes = Column(Text, nullable=True)
+    created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
+
+    # Relationships
+    original_filing = relationship("KRATaxFiling", foreign_keys=[original_filing_id])
+    user = relationship("User")
+
+
+class KRATaxDocument(Base):
+    """KRA Tax Document model"""
+    __tablename__ = "kra_tax_documents"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    filing_id = Column(UUID(as_uuid=True), ForeignKey("kra_tax_filings.id"), nullable=True)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    document_type = Column(String(50), nullable=False)  # tax_return, receipt, supporting_doc, etc.
+    filename = Column(String(255), nullable=False)
+    original_filename = Column(String(255), nullable=False)
+    file_path = Column(String(500), nullable=False)
+    file_size = Column(Integer, nullable=False)
+    mime_type = Column(String(100), nullable=False)
+    kra_document_id = Column(String(50), nullable=True)  # KRA's document reference
+    upload_date = Column(DateTime, server_default=func.now())
+    verification_status = Column(String(20), default="pending")  # pending, verified, rejected
+    metadata = Column(JSON, nullable=True)
+    created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
+
+    # Relationships
+    filing = relationship("KRATaxFiling")
+    user = relationship("User")
+
+
+class KRAFilingValidation(Base):
+    """KRA Filing Validation model"""
+    __tablename__ = "kra_filing_validations"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    filing_id = Column(UUID(as_uuid=True), ForeignKey("kra_tax_filings.id"), nullable=False)
+    validation_id = Column(String(50), nullable=True)  # KRA validation reference
+    is_valid = Column(Boolean, nullable=False)
+    errors = Column(JSON, nullable=True)    # Validation errors
+    warnings = Column(JSON, nullable=True)  # Validation warnings
+    validation_date = Column(DateTime, server_default=func.now())
+    created_at = Column(DateTime, server_default=func.now())
+
+    # Relationships
+    filing = relationship("KRATaxFiling")

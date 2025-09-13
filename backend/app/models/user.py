@@ -26,6 +26,14 @@ class User(Base):
     tax_filings = relationship("TaxFiling", back_populates="user", cascade="all, delete-orphan")
     kra_taxpayer = relationship("KRATaxpayer", back_populates="user", uselist=False, cascade="all, delete-orphan")
     business_entities = relationship("BusinessEntity", back_populates="user", cascade="all, delete-orphan")
+    budgets = relationship("Budget", back_populates="user", cascade="all, delete-orphan")
+    financial_goals = relationship("FinancialGoal", back_populates="user", cascade="all, delete-orphan")
+    cash_flow_forecasts = relationship("CashFlowForecast", back_populates="user", cascade="all, delete-orphan")
+    budget_alerts = relationship("BudgetAlert", back_populates="user", cascade="all, delete-orphan")
+    
+    # Security relationships
+    mfa_methods = relationship("MFAMethod", back_populates="user", cascade="all, delete-orphan")
+    roles = relationship("Role", secondary="user_roles", back_populates="users")
 
     def __repr__(self):
         return f"<User(id={self.id}, email={self.email})>"
