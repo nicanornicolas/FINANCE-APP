@@ -25,3 +25,8 @@ cryptography==42.0.5
 celery==5.3.4
 redis==5.0.1
 
+# Security dependencies
+pyotp==2.9.0
+qrcode[pil]==7.4.2
+bcrypt==4.1.2
+
