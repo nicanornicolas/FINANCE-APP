@@ -16,7 +16,13 @@ from app.schemas.kra_tax import (
     KRATaxCalculationResponse,
     KRAPINValidationRequest, KRAPINValidationResponse,
     KRATaxDeductionCreate, KRATaxDeductionResponse,
-    KRATaxPaymentCreate, KRATaxPaymentResponse
+    KRATaxPaymentCreate, KRATaxPaymentResponse,
+    KRATaxAmendmentCreate, KRATaxAmendmentResponse,
+    KRATaxDocumentCreate, KRATaxDocumentResponse,
+    KRAFormValidationRequest, KRAFormValidationResponse,
+    KRAFilingHistoryResponse, KRAFilingValidationResponse,
+    KRAPaymentInitiationRequest, KRAPaymentInitiationResponse,
+    KRAPaymentConfirmationRequest, KRAPaymentMethodsResponse
 )
 
 router = APIRouter()
@@ -328,3 +334,273 @@ def get_tax_dashboard(
             {"action": "make_payment", "label": "Make Tax Payment"}
         ]
     }
+
+
+# E-Filing Endpoints
+
+@router.post("/filings/{filing_id}/validate", response_model=KRAFormValidationResponse)
+async def validate_tax_form(
+    *,
+    db: Session = Depends(get_db),
+    filing_id: UUID,
+    current_user: User = Depends(get_current_user)
+):
+    """Validate tax form before submission"""
+    try:
+        return await kra_tax_service.validate_tax_form(
+            db, user_id=current_user.id, filing_id=filing_id
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to validate tax form"
+        )
+
+
+@router.get("/filings/{filing_id}/validations", response_model=List[KRAFilingValidationResponse])
+def get_filing_validations(
+    *,
+    db: Session = Depends(get_db),
+    filing_id: UUID,
+    current_user: User = Depends(get_current_user)
+):
+    """Get filing validation history"""
+    try:
+        return kra_tax_service.get_filing_validations(
+            db, user_id=current_user.id, filing_id=filing_id
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to get filing validations"
+        )
+
+
+@router.get("/filing-history", response_model=KRAFilingHistoryResponse)
+async def get_filing_history(
+    *,
+    db: Session = Depends(get_db),
+    tax_year: int = None,
+    current_user: User = Depends(get_current_user)
+):
+    """Get filing history from KRA"""
+    try:
+        return await kra_tax_service.get_filing_history(
+            db, user_id=current_user.id, tax_year=tax_year
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to get filing history"
+        )
+
+
+# Amendment Endpoints
+
+@router.post("/amendments", response_model=KRATaxAmendmentResponse)
+def create_amendment(
+    *,
+    db: Session = Depends(get_db),
+    amendment_data: KRATaxAmendmentCreate,
+    current_user: User = Depends(get_current_user)
+):
+    """Create tax filing amendment"""
+    try:
+        return kra_tax_service.create_amendment(
+            db, amendment_data=amendment_data, user_id=current_user.id
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to create amendment"
+        )
+
+
+@router.post("/amendments/{amendment_id}/submit")
+async def submit_amendment(
+    *,
+    db: Session = Depends(get_db),
+    amendment_id: UUID,
+    current_user: User = Depends(get_current_user)
+):
+    """Submit amendment to KRA"""
+    try:
+        return await kra_tax_service.submit_amendment(
+            db, user_id=current_user.id, amendment_id=amendment_id
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to submit amendment"
+        )
+
+
+@router.get("/amendments", response_model=List[KRATaxAmendmentResponse])
+def get_amendments(
+    *,
+    db: Session = Depends(get_db),
+    filing_id: UUID = None,
+    current_user: User = Depends(get_current_user)
+):
+    """Get user's tax amendments"""
+    return kra_tax_service.get_user_amendments(
+        db, user_id=current_user.id, filing_id=filing_id
+    )
+
+
+# Document Management Endpoints
+
+@router.post("/documents", response_model=KRATaxDocumentResponse)
+def upload_document(
+    *,
+    db: Session = Depends(get_db),
+    document_data: KRATaxDocumentCreate,
+    current_user: User = Depends(get_current_user)
+):
+    """Upload supporting document"""
+    try:
+        return kra_tax_service.upload_document(
+            db, document_data=document_data, user_id=current_user.id, file_content=document_data.file_content
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to upload document"
+        )
+
+
+@router.post("/documents/{document_id}/upload-to-kra")
+async def upload_document_to_kra(
+    *,
+    db: Session = Depends(get_db),
+    document_id: UUID,
+    current_user: User = Depends(get_current_user)
+):
+    """Upload document to KRA system"""
+    try:
+        return await kra_tax_service.upload_document_to_kra(
+            db, user_id=current_user.id, document_id=document_id
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to upload document to KRA"
+        )
+
+
+@router.get("/documents", response_model=List[KRATaxDocumentResponse])
+def get_documents(
+    *,
+    db: Session = Depends(get_db),
+    filing_id: UUID = None,
+    current_user: User = Depends(get_current_user)
+):
+    """Get user's tax documents"""
+    return kra_tax_service.get_user_documents(
+        db, user_id=current_user.id, filing_id=filing_id
+    )
+
+
+# Payment Endpoints
+
+@router.get("/payment-methods", response_model=KRAPaymentMethodsResponse)
+async def get_payment_methods(
+    *,
+    current_user: User = Depends(get_current_user)
+):
+    """Get available payment methods"""
+    try:
+        return await kra_tax_service.get_payment_methods()
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to get payment methods"
+        )
+
+
+@router.post("/payments/initiate", response_model=KRAPaymentInitiationResponse)
+async def initiate_payment(
+    *,
+    db: Session = Depends(get_db),
+    payment_request: KRAPaymentInitiationRequest,
+    current_user: User = Depends(get_current_user)
+):
+    """Initiate tax payment"""
+    try:
+        return await kra_tax_service.initiate_payment(
+            db, user_id=current_user.id, payment_request=payment_request
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to initiate payment"
+        )
+
+
+@router.post("/payments/confirm")
+async def confirm_payment(
+    *,
+    db: Session = Depends(get_db),
+    confirmation_request: KRAPaymentConfirmationRequest,
+    current_user: User = Depends(get_current_user)
+):
+    """Confirm payment completion"""
+    try:
+        return await kra_tax_service.confirm_payment(
+            db, user_id=current_user.id, confirmation_request=confirmation_request
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to confirm payment"
+        )
